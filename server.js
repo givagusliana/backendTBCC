@@ -10,14 +10,14 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// 2. Konfigurasi Koneksi Database MariaDB
+// 2. Konfigurasi Koneksi Database MariaDB di GCP Cloud
 const sequelize = new Sequelize(process.env.DB_NAME, process.env.DB_USER, process.env.DB_PASSWORD, {
   host: process.env.DB_HOST,
   dialect: 'mysql',
   logging: false,
 });
 
-// 3. Definisi Model/Tabel Songs
+// 3. Definisi Model/Tabel Songs (Tema Unik)
 const Song = sequelize.define('Song', {
   id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
   title: { type: DataTypes.STRING, allowNull: false },
@@ -30,19 +30,20 @@ const Song = sequelize.define('Song', {
   timestamps: false
 });
 
-// Sync database agar tabel sinkron otomatis dengan backend
+// Sinkronisasi Database
 sequelize.sync()
-  .then(() => console.log('Database & tables synced!'))
+  .then(() => console.log('Database & tables synced successfully!'))
   .catch(err => console.error('Error syncing database:', err));
 
+
 // =========================================================================
-// ENDPOINT WAJIB (Sesuai Instruksi Tugas Besar)
+// ENDPOINT REST API (Wajib Sesuai Dokumen Instruksi Asisten)
 // =========================================================================
 
-// GET /health - Mengecek status backend dan database
+// GET /health - Mengecek status backend dan database cloud GCP (Sesuai Poin 7)
 app.get('/health', async (req, res) => {
   try {
-    await sequelize.authenticate(); // Cek koneksi ke DB
+    await sequelize.authenticate();
     res.json({
       status: "success",
       message: "Backend is running",
@@ -65,7 +66,7 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// GET /schema - Untuk dibaca otomatis oleh Frontend asisten
+// GET /schema - Untuk dibaca otomatis oleh Frontend Penguji (Sesuai Poin 8)
 app.get('/schema', (req, res) => {
   res.json({
     student: { name: "Giva Gusliana", nim: "2311523022" },
@@ -91,12 +92,11 @@ app.get('/schema', (req, res) => {
   });
 });
 
-// GET /songs - Mengambil data lagu dan mendukung pencarian segala parameter (query, search, title, dll)
+// GET /songs - Mengambil semua data lagu (Sesuai Poin 9)
 app.get('/songs', async (req, res) => {
+  const startTime = Date.now();
   try {
-    // Menangkap segala kemungkinan parameter pencarian dari frontend penguji
-    const searchKeyword = req.query.search || req.query.q || req.query.query || req.query.title || req.query.artist || '';
-    
+    const searchKeyword = req.query.search || req.query.q || req.query.query || '';
     let options = {};
     
     if (searchKeyword) {
@@ -111,54 +111,80 @@ app.get('/songs', async (req, res) => {
     }
 
     const data = await Song.findAll(options);
-    res.json(data);
+    const totalCount = await Song.count(options);
+    const responseTime = Date.now() - startTime;
+
+    // Response dibungkus rapi sesuai kebutuhan dashboard tester + format asisten
+    res.json({
+      status: "success",
+      message: "Data retrieved successfully",
+      data: data,
+      total: totalCount,
+      responseTime: `${responseTime}ms`
+    });
   } catch (error) {
     res.status(500).json({ status: "error", message: error.message });
   }
 });
 
-// GET /songs/:id - Mengambil detail satu lagu berdasarkan ID
+// GET /songs/:id - Detail satu lagu
 app.get('/songs/:id', async (req, res) => {
   try {
     const data = await Song.findByPk(req.params.id);
     if (!data) return res.status(404).json({ status: "error", message: "Data tidak ditemukan" });
-    res.json(data);
+    
+    res.json({
+      status: "success",
+      message: "Data retrieved successfully",
+      data: data
+    });
   } catch (error) {
     res.status(500).json({ status: "error", message: error.message });
   }
 });
 
-// POST /songs - Menambahkan lagu baru ke database
+// POST /songs - Tambah lagu baru (Sesuai Poin 9)
 app.post('/songs', async (req, res) => {
   try {
     const newData = await Song.create(req.body);
-    res.status(201).json(newData);
+    res.status(201).json({
+      status: "success",
+      message: "Data created successfully",
+      data: newData
+    });
   } catch (error) {
     res.status(500).json({ status: "error", message: error.message });
   }
 });
 
-// PUT /songs/:id - Mengubah data lagu berdasarkan ID
+// PUT /songs/:id - Ubah data lagu (Sesuai Poin 9)
 app.put('/songs/:id', async (req, res) => {
   try {
     const data = await Song.findByPk(req.params.id);
     if (!data) return res.status(404).json({ status: "error", message: "Data tidak ditemukan" });
     
     await data.update(req.body);
-    res.json(data);
+    res.json({
+      status: "success",
+      message: "Data updated successfully",
+      data: data
+    });
   } catch (error) {
     res.status(500).json({ status: "error", message: error.message });
   }
 });
 
-// DELETE /songs/:id - Menghapus lagu dari database
+// DELETE /songs/:id - Hapus lagu (Sesuai Poin 9)
 app.delete('/songs/:id', async (req, res) => {
   try {
     const data = await Song.findByPk(req.params.id);
     if (!data) return res.status(404).json({ status: "error", message: "Data tidak ditemukan" });
     
     await data.destroy();
-    res.json({ success: true, message: "Data deleted successfully" });
+    res.json({
+      status: "success",
+      message: "Data deleted successfully"
+    });
   } catch (error) {
     res.status(500).json({ status: "error", message: error.message });
   }
@@ -169,14 +195,10 @@ app.get("/", (req, res) => {
   res.json({
     status: "success",
     message: "API songs running successfully",
-    student: {
-      name: "Giva Gusliana",
-      nim: "2311523022"
-    }
+    student: { name: "Giva Gusliana", nim: "2311523022" }
   });
 });
 
-// Menjalankan Server
 app.listen(PORT, () => {
-  console.log(`Server backend berjalan di http://localhost:${PORT}`);
+  console.log(`Server backend berjalan stabil di port ${PORT}`);
 });
